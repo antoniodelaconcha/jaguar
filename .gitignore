@@ -1,0 +1,5 @@
+# Real config holds the database password: never commit it
+private/config.php
+# Server logs
+error_log
+*.log

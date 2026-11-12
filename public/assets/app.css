@@ -1,0 +1,76 @@
+:root{--ink:#1d2430;--mut:#6b7280;--line:#e5e7eb;--ok:#2e7d4f;--late:#c0392b;--acc:#0F3A18;--off:#f1f2f4}
+[hidden]{display:none !important}
+*{box-sizing:border-box}
+body{font-family:"Malgun Gothic","Malgun Gothic Light",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);margin:0;padding:0 18px 18px;font-size:14px;background:#fff}
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:14px 0 6px;border-bottom:1px solid var(--line);margin-bottom:12px}
+h1{font-size:20px;margin:0;color:#0F3A18}
+h2{font-size:15px;margin:20px 0 8px;color:#0F3A18}
+b,strong{color:#0F3A18}
+.who{color:var(--mut);font-size:13px}
+.sub{color:var(--mut);margin-bottom:14px;line-height:1.5}
+.card{border:1px solid var(--line);border-radius:8px;padding:14px;max-width:460px;margin:20px auto}
+.stack{display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 6px;color:#0F3A18}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut)}
+input,textarea,select{font:inherit;padding:4px 6px;border:1px solid #cfd4dc;border-radius:5px;color:var(--ink);background:#fff}
+input.h{width:64px}
+input[type=email],input[type=password],input[name=company],input[name=name]{min-width:220px}
+textarea{width:100%;min-height:58px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+button{font:inherit;padding:5px 11px;border:1px solid #cfd4dc;background:#fff;border-radius:5px;cursor:pointer}
+button:hover{background:#f7f8fa}
+button.x{padding:2px 8px;color:var(--late)}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:4px 5px;text-align:left;vertical-align:middle;white-space:nowrap}
+th{font-size:12px;color:var(--mut);font-weight:600}
+td input{width:100%;min-width:52px}
+td input.s{width:58px}
+td input.d{width:132px}
+td input.w{width:110px}
+td input.n{min-width:130px}
+.grip{cursor:grab;color:#9aa0aa;font-size:18px;line-height:1;user-select:none;touch-action:none;padding:0 6px;text-align:center}
+.grip:active{cursor:grabbing}
+.mb{padding:0 5px;margin:0 1px;font-size:11px;line-height:1.4}
+tr.dragging{opacity:.5;background:#f7f8fa}
+.pri-cell{text-align:center;font-weight:600;color:var(--acc);width:60px}
+.late{color:var(--late);font-weight:600}
+.ok{color:var(--ok);font-weight:600}
+.err{color:#b00020;font-size:13px;margin-top:8px}
+.summary{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 10px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:150px}
+.kpi b{display:block;font-size:18px}
+.kpi span{color:var(--mut);font-size:12px}
+.gantt{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.g-row{display:flex;border-bottom:1px solid var(--line)}
+.g-label{flex:0 0 230px;position:sticky;left:0;z-index:2;background:#fff;padding:5px 8px;border-right:1px solid var(--line);font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.g-label small{color:var(--mut);display:block}
+.g-track{position:relative;flex:0 0 auto;height:36px}
+.g-head .g-track{height:42px}
+.g-head .g-label{height:42px;font-weight:600;color:var(--mut)}
+.day{position:absolute;top:0;bottom:0;border-right:1px solid #f0f1f3;font-size:10px;color:var(--mut);text-align:center;padding-top:4px;line-height:1.25}
+.day.head{top:0;bottom:auto;height:42px}
+.nw{position:absolute;top:0;bottom:0;background:var(--off)}
+.bar-s{position:absolute;top:9px;height:18px;border-radius:3px;background:var(--ok);opacity:.92}
+.bar-s.late{background:var(--late)}
+.due{position:absolute;top:0;bottom:0;border-left:2px dashed #111;opacity:.55}
+.sep{position:absolute;top:0;bottom:0;border-left:1px solid #d7dbe1}
+.note{color:var(--mut);font-size:12px;margin-top:6px;line-height:1.5}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin:6px 0;flex-wrap:wrap}
+.sw{display:inline-block;width:12px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.tabs{display:flex;gap:6px;margin:6px 0 12px;flex-wrap:wrap}
+.tabbtn{padding:6px 14px}
+.tabbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.tab{display:none}
+.tab.on{display:block}
+.zbtn{padding:5px 12px}
+.zbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+/* Phone layout: task names stay on the left of the Gantt */
+@media (max-width:700px){
+  .desk-only{display:none}
+  .g-label{flex:0 0 120px;width:120px}
+  .g-label small{display:none}
+  .g-head .g-label{font-size:11px}
+}

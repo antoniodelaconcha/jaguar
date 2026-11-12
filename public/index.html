@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jaguar Task Scheduler</title>
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header class="top">
+  <h1>Jaguar Task Scheduler</h1>
+  <div id="who" class="who"></div>
+</header>
+
+<!-- Log in / create company account -->
+<section id="authBox" class="card" hidden>
+  <div class="tabs">
+    <button class="tabbtn on" id="showLogin" type="button">Log in</button>
+    <button class="tabbtn" id="showRegister" type="button">Create company account</button>
+  </div>
+  <form id="loginForm" class="stack">
+    <label class="f">Email <input name="email" type="email" required autocomplete="username"></label>
+    <label class="f">Password <input name="password" type="password" required autocomplete="current-password"></label>
+    <button type="submit">Log in</button>
+  </form>
+  <form id="registerForm" class="stack" hidden>
+    <label class="f">Company name <input name="company" required></label>
+    <label class="f">Your name <input name="name" required></label>
+    <label class="f">Email <input name="email" type="email" required autocomplete="username"></label>
+    <label class="f">Password (at least 10 characters) <input name="password" type="password" minlength="10" required autocomplete="new-password"></label>
+    <button type="submit">Create account</button>
+  </form>
+  <div id="authMsg" class="err"></div>
+</section>
+
+<!-- Application (shown after log in) -->
+<div id="appBox" hidden>
+  <div class="bar">
+    <span id="status" class="note"></span>
+    <button id="logoutBtn" type="button">Log out</button>
+  </div>
+
+  <div class="sub">Forward scheduling on a work calendar, with resource leveling by priority. Priority comes from row position: the top row is priority 1 (most important). Drag a row by its ⋮⋮ handle, or use ▲ ▼, to change its priority. Your data is saved to your account.</div>
+
+  <div class="tabs">
+    <button class="tabbtn" data-tab="tab-cal" type="button">Calendar</button>
+    <button class="tabbtn on" data-tab="tab-main" type="button">Tasks &amp; Gantt</button>
+  </div>
+
+  <div class="tab" id="tab-cal">
+    <fieldset>
+      <legend>Work calendar</legend>
+      <div class="row" style="margin-top:8px" id="weekRow"></div>
+      <div style="margin-top:8px">
+        <label class="f">Date overrides, one per line: YYYY-MM-DD=HH:MM-HH:MM for a working day, or YYYY-MM-DD=off for a day off (e.g. a Saturday push)
+          <textarea id="cOver"></textarea></label>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="tab on" id="tab-main">
+    <fieldset>
+      <legend>Tasks</legend>
+      <div style="margin-bottom:12px">
+        <label class="f">Paste from Excel: 15 columns in this order, copied without a header row or with one (it is skipped): ID, Item, Status, Project No, Phase, Date, Task, Other, Description, Owner, Duration, Due, Priority, Predecessor, ID_Item
+          <textarea id="paste" placeholder="Paste rows here"></textarea></label>
+        <div class="row" style="margin-top:6px">
+          <button id="pasteAppend" type="button">Append rows</button>
+          <button id="pasteReplace" type="button">Replace table</button>
+          <span class="note" style="margin:0">Row order = priority (top = 1). The Priority column is ignored.</span>
+        </div>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr>
+            <th></th><th>ID_Item</th><th>Task</th><th>Resource</th><th>Duration (h)</th><th>Due</th><th>Priority</th><th>Predecessors</th><th>Fixed start</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="addBtn" type="button">+ Add task</button>
+        <button id="resetBtn" type="button">Reload sample</button>
+      </div>
+      <div class="note">Duration is in working hours. Due dates are the end of that day. New tasks go to the bottom (lowest priority) until you drag them up. Predecessors are comma-separated ID_Item values. Fixed start is optional and means the task cannot start before that day at the day-start hour.</div>
+    </fieldset>
+
+    <h2 class="desk-only">Results</h2>
+    <div class="summary" id="summary"></div>
+    <div class="tbl desk-only">
+      <table>
+        <thead><tr><th>ID</th><th>Task</th><th>Resource</th><th>Priority</th><th>Start</th><th>Finish</th><th>Work (h)</th><th>Waiting (h)</th><th>Due</th><th>Margin (cal. days)</th><th>Status</th></tr></thead>
+        <tbody id="resBody"></tbody>
+      </table>
+    </div>
+
+    <h2>Gantt</h2>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--ok)"></span>On time</span>
+      <span><span class="sw" style="background:var(--late)"></span>Late</span>
+      <span><span class="sw" style="background:var(--off);border:1px solid #ddd"></span>Non-working day</span>
+      <span><span class="sw" style="border-left:2px dashed #111;width:0"></span>Due (end of day)</span>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="zbtn" data-z="hours" type="button">Hours</button>
+      <button class="zbtn on" data-z="day" type="button">Day</button>
+      <button class="zbtn" data-z="week" type="button">Week</button>
+      <button class="zbtn" data-z="month" type="button">Month</button>
+    </div>
+    <div class="gantt" id="gantt"></div>
+    <div class="note">Waiting = working hours a task was ready (predecessors done, fixed start passed) but its resource was working on something with higher priority.</div>
+  </div>
+
+  <!-- Team management: visible to owners and admins only -->
+  <fieldset id="teamBox" hidden>
+    <legend>Team</legend>
+    <div id="teamList" class="note"></div>
+    <form id="addUserForm" class="row" style="margin-top:8px">
+      <label class="f">Name <input name="name" required></label>
+      <label class="f">Email <input name="email" type="email" required></label>
+      <label class="f">Temporary password <input name="password" type="text" minlength="10" required></label>
+      <label class="f">Role
+        <select name="role"><option value="member">Member</option><option value="admin">Admin</option></select></label>
+      <button type="submit">Add user</button>
+    </form>
+    <div id="teamMsg" class="note"></div>
+  </fieldset>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
