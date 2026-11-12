@@ -10,6 +10,7 @@ const MAXD = 1500;            // maximum days to simulate
 const PXD = 56;               // pixels per day in Day view
 const DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const PDD_DEFAULT_H = 12;   // Pdd (probable due date) without a time means noon
 const WEEK_DEFAULT = [['08:00', '15:30'], ['08:00', '15:30'], ['08:00', '15:30'], ['08:00', '15:30'], ['08:00', '15:30'], ['', ''], ['', '']];
 const SAMPLE = [
   { id: 'T1', name: 'Site visit', res: 'Eng A', dur: 6, due: '2026-11-12', preds: '', fixed: '' },
@@ -26,7 +27,20 @@ const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, '0');
 const ymd = (y, m, d) => y + '-' + pad(m) + '-' + pad(d);
 const fmtKey = dt => ymd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
-function parseDate(s) { if (!s) return null; const p = String(s).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function parseDate(s) { if (!s) return null; const p = String(s).slice(0, 10).split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+// Hours of the day from 'YYYY-MM-DD HH:MM', or null when only the date was given
+function timeOf(s) { const m = String(s || '').match(/ (\d{2}):(\d{2})$/); return m ? (+m[1]) + (+m[2]) / 60 : null; }
+// Display format for dates: yymmmdd (26Nov20); with time: yymmmdd HH:MM, 24-hour (26Nov20 14:30)
+const fmtYMD = dt => pad(dt.getFullYear() % 100) + MN[dt.getMonth()] + pad(dt.getDate());
+const fmtHM = h => { const t = Math.round(h * 60); return pad(Math.floor(t / 60)) + ':' + pad(t % 60); };   // 24-hour clock
+// Shows 'YYYY-MM-DD[ HH:MM]' as 26Nov20[ 14:30]. defH = time to show when none was entered.
+function isoToShow(iso, defH) {
+  const d = parseDate(iso);
+  if (!d || isNaN(d)) return '';
+  const h = timeOf(iso) ?? (defH === undefined || defH === null || defH === '' ? null : +defH);
+  return fmtYMD(d) + (h === null ? '' : ' ' + fmtHM(h));
+}
+function fmtDur(v) { const n = parseFloat(String(v === undefined || v === null ? '' : v).replace(',', '.')); return isFinite(n) ? n.toFixed(2) : ''; }
 function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 let CSRF = '';
@@ -187,49 +201,65 @@ function renumber() {
 /* One table: task inputs, schedule results and the Gantt bar share each row.
  * f = scheduler field, x = Excel column kept in "extra", out = result filled by recalc. */
 const COLS = [
-  { k: 'grip', label: '', fixed: true, stk: true },
-  { k: 'pri', label: 'Priority', stk: true },
-  { k: 'id', label: 'ID_Item', f: 'id', cls: 's', stk: true },
-  { k: 'name', label: 'Task', f: 'name', cls: 'n', stk: true },
-  { k: 'project_no', label: 'Project No', x: 'project_no', cls: 's' },
-  { k: 'res', label: 'Resource', f: 'res' },
-  { k: 'dur', label: 'Duration (h)', f: 'dur', cls: 's', num: true },
-  { k: 'due', label: 'Due', f: 'due', cls: 'd', date: true },
-  { k: 'preds', label: 'Predecessors', f: 'preds', cls: 'w' },
-  { k: 'fixed', label: 'Fixed start', f: 'fixed', cls: 'd', date: true },
-  { k: 'id_label', label: 'ID', x: 'id_label', cls: 's', hide: true },
-  { k: 'item', label: 'Item', x: 'item', hide: true },
-  { k: 'status', label: 'Status', x: 'status', cls: 's', hide: true },
-  { k: 'phase', label: 'Phase', x: 'phase', hide: true },
-  { k: 'task_date', label: 'Date', x: 'task_date', cls: 'w', hide: true },
-  { k: 'other', label: 'Other', x: 'other', hide: true },
-  { k: 'description', label: 'Description', x: 'description', cls: 'n', hide: true },
-  { k: 'start', label: 'Start', out: true },
-  { k: 'finish', label: 'Finish', out: true },
-  { k: 'wait', label: 'Waiting (h)', out: true, hide: true },
-  { k: 'margin', label: 'Margin (cal. days)', out: true, hide: true },
-  { k: 'sched', label: 'Schedule', out: true },
-  { k: 'del', label: '', fixed: true },
+  { k: 'grip', label: '', fixed: true, stk: true, w: 34 },
+  { k: 'pri', label: 'Priority', stk: true, w: 62 },
+  { k: 'task', label: 'Task', fixed: true, stk: true, group: true, w: 300 },   // ID_Item + Task / Owner · Project No · Duration
+  { k: 'due', label: 'Pdd', f: 'due', date: true, w: 140 },
+  { k: 'preds', label: 'Predecessors', f: 'preds', w: 110 },
+  { k: 'fixed', label: 'Fixed start', f: 'fixed', date: true, w: 140 },
+  { k: 'id_label', label: 'ID', x: 'id_label', hide: true, w: 70 },
+  { k: 'item', label: 'Item', x: 'item', hide: true, w: 90 },
+  { k: 'status', label: 'Status', x: 'status', hide: true, w: 80 },
+  { k: 'phase', label: 'Phase', x: 'phase', hide: true, w: 90 },
+  { k: 'task_date', label: 'Date', x: 'task_date', hide: true, w: 90 },
+  { k: 'other', label: 'Other', x: 'other', hide: true, w: 90 },
+  { k: 'description', label: 'Description', x: 'description', hide: true, w: 180 },
+  { k: 'start', label: 'Start', out: true, w: 112 },
+  { k: 'finish', label: 'Finish', out: true, w: 112 },
+  { k: 'wait', label: 'Waiting (h)', out: true, hide: true, w: 80 },
+  { k: 'margin', label: 'Margin (cal. days)', out: true, hide: true, w: 110 },
+  { k: 'sched', label: 'Schedule', out: true, w: 96 },
+  { k: 'del', label: '', fixed: true, w: 34 },
   { k: 'gantt', label: 'Gantt' }
 ];
+const WIDTH_KEY = 'jaguar.colWidths';
+let colW = {};
+try { const saved = JSON.parse(localStorage.getItem(WIDTH_KEY)); if (saved && typeof saved === 'object') colW = saved; } catch (e) { /* keep defaults */ }
+let ganttW = 0;
+const colWidth = c => (c.k === 'gantt' ? ganttW : (colW[c.k] || c.w));
 const COLS_KEY = 'jaguar.hiddenCols';
 let hiddenCols = new Set(COLS.filter(c => c.hide).map(c => c.k));
 try { const saved = JSON.parse(localStorage.getItem(COLS_KEY)); if (Array.isArray(saved)) hiddenCols = new Set(saved); } catch (e) { /* keep defaults */ }
 
+const CAL_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5" fill="none" stroke="currentColor"/><path d="M1.5 6h13M5 1v3M11 1v3" stroke="currentColor"/></svg>';
+const sz = (v, min) => Math.max(min, String(v === undefined || v === null ? '' : v).length + 1);
+function inp(attr, val, cls, min) {
+  return '<input ' + attr + ' class="nav' + (cls ? ' ' + cls : '') + '"' + (min ? ' size="' + sz(val, min) + '"' : '') +
+         ' value="' + esc(val) + '" autocomplete="off" spellcheck="false">';
+}
 function cellHtml(c, t, x) {
   if (c.k === 'grip') return '<span class="grip" title="Drag to change priority">⋮⋮</span>';
   if (c.k === 'pri') return '–';
-  if (c.k === 'del') return '<button class="x" type="button" title="Remove">✕</button>';
-  if (c.f || c.x) {
-    const val = c.f ? t[c.f] : x[c.x];
-    const type = c.num ? ' type="number" step="0.25" min="0"' : c.date ? ' type="date"' : '';
-    return '<input ' + (c.f ? 'data-f="' + c.f : 'data-x="' + c.x) + '"' + (c.cls ? ' class="' + c.cls + '"' : '') + type + ' value="' + esc(val) + '">';
+  if (c.k === 'del') return '<button class="x" type="button" title="Remove" tabindex="-1">✕</button>';
+  if (c.group) {
+    return '<div class="g1">' + inp('data-f="id" title="ID_Item"', t.id, 'fit', 3) + inp('data-f="name" title="Task"', t.name, 'nm') + '</div>' +
+           '<div class="g2">' + inp('data-f="res" title="Owner"', t.res, 'fit', 2) + '<span class="sep2">·</span>' +
+           inp('data-x="project_no" title="Project No"', x.project_no, 'fit pj', 2) + '<span class="sep2">·</span>' +
+           inp('data-f="dur" title="Duration (working hours)" inputmode="decimal"', fmtDur(t.dur), 'fit', 3) + '<span>h</span></div>';
   }
+  if (c.date) {
+    const iso = parseFlexDate(t[c.f]) || '';
+    return '<div class="dtw"><input data-f="' + c.f + '" data-iso="' + iso + '" class="nav dt" value="' + isoToShow(iso) + '" autocomplete="off" spellcheck="false">' +
+           '<button type="button" class="dtb" tabindex="-1" title="Pick date and time (Alt+Down)">' + CAL_ICON + '</button></div>';
+  }
+  if (c.f) return inp('data-f="' + c.f + '"', t[c.f]);
+  if (c.x) return inp('data-x="' + c.x + '"', x[c.x]);
   return '';
 }
 
 function buildHead() {
-  $('headRow').innerHTML = COLS.map(c => '<th class="c-' + c.k + (c.stk ? ' stk' : '') + '">' + esc(c.label) + '</th>').join('');
+  $('headRow').innerHTML = COLS.map(c => '<th class="c-' + c.k + (c.stk ? ' stk' : '') + '"><span class="lbl">' + esc(c.label) + '</span>' +
+    (c.k === 'grip' || c.k === 'del' || c.k === 'gantt' ? '' : '<span class="rz" data-k="' + c.k + '" title="Drag to change the width"></span>') + '</th>').join('');
 }
 
 function buildColMenu() {
@@ -250,8 +280,50 @@ function applyCols() {
   let st = $('colStyle');
   if (!st) { st = document.createElement('style'); st.id = 'colStyle'; document.head.appendChild(st); }
   st.textContent = Array.from(hiddenCols).map(k => '#taskTable .c-' + k + '{display:none}').join('');
+  applyWidths();
+}
+
+/* ---------- column widths (Excel style: drag the right edge of a header) ---------- */
+function applyWidths() {
+  let st = $('wStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'wStyle'; document.head.appendChild(st); }
+  let total = 0, css = '';
+  COLS.forEach(c => {
+    const w = colWidth(c);
+    css += '#taskTable .c-' + c.k + '{width:' + w + 'px;min-width:' + w + 'px;max-width:' + w + 'px}';
+    if (!hiddenCols.has(c.k)) total += w;
+  });
+  st.textContent = css + '#taskTable{width:' + total + 'px}';
   applySticky();
 }
+
+$('headRow').addEventListener('pointerdown', e => {
+  const h = e.target.closest('.rz');
+  if (!h) return;
+  e.preventDefault();
+  const k = h.dataset.k, c = COLS.find(z => z.k === k), x0 = e.clientX, w0 = colWidth(c), id = e.pointerId;
+  document.body.classList.add('resizing');
+  const mv = ev => { if (ev.pointerId !== id) return; colW[k] = Math.max(36, Math.round(w0 + ev.clientX - x0)); applyWidths(); };
+  const up = ev => {
+    if (ev.pointerId !== id) return;
+    document.body.classList.remove('resizing');
+    document.removeEventListener('pointermove', mv);
+    document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', up);
+    try { localStorage.setItem(WIDTH_KEY, JSON.stringify(colW)); } catch (err) { /* not kept on this device */ }
+  };
+  document.addEventListener('pointermove', mv);
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+});
+// Double-click the edge to go back to the default width
+$('headRow').addEventListener('dblclick', e => {
+  const h = e.target.closest('.rz');
+  if (!h) return;
+  delete colW[h.dataset.k];
+  try { localStorage.setItem(WIDTH_KEY, JSON.stringify(colW)); } catch (err) { /* ignore */ }
+  applyWidths();
+});
 
 // Keeps the visible ⋮⋮ / Priority / ID_Item / Task columns fixed on the left while the Gantt scrolls (wide screens only, see CSS)
 function applySticky() {
@@ -272,7 +344,8 @@ function makeRow(t) {
   const tr = document.createElement('tr');
   const x = t.extra || {};
   tr.dataset.extra = JSON.stringify(x);
-  tr.innerHTML = COLS.map(c => '<td class="c-' + c.k + (c.stk ? ' stk' : '') + (c.k === 'pri' ? ' pri-cell' : '') + '">' + cellHtml(c, t, x) + '</td>').join('');
+  tr.innerHTML = COLS.map(c => '<td class="c-' + c.k + (c.stk ? ' stk' : '') + (c.k === 'pri' ? ' pri-cell' : '') + (c.out ? ' nav ro' : '') + '"' +
+    (c.out ? ' tabindex="-1"' : '') + '>' + cellHtml(c, t, x) + '</td>').join('');
   tr.querySelector('.x').addEventListener('click', () => { tr.remove(); recalc(); });
   tr.addEventListener('pointerdown', e => pressRow(tr, e));
   return tr;
@@ -290,6 +363,8 @@ function pressRow(tr, e) {
   if (dragActive) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   if (e.target.closest('input,textarea,select,button,a')) return;
+  const ro = e.target.closest('td.ro');
+  if (ro) ro.focus({ preventScroll: true });
   if (e.pointerType === 'mouse' || e.target.closest('.grip')) { e.preventDefault(); startDrag(tr, e); return; }
   const x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
   pressPending = true;
@@ -350,6 +425,100 @@ $('tbody').addEventListener('touchstart', () => {}, { passive: false });
 $('tbody').addEventListener('touchmove', e => { if (dragActive && e.cancelable) e.preventDefault(); }, { passive: false });
 document.addEventListener('contextmenu', e => { if ((dragActive || pressPending) && !e.target.closest('input,textarea')) e.preventDefault(); });
 
+/* ---------- spreadsheet keys ----------
+ * Entering a cell selects all its text, so typing replaces it. Arrow keys move between cells.
+ * F2 or a second click edits inside the text (then Left/Right move the cursor). Esc undoes the edit.
+ * Enter moves down, Shift+Enter up, Tab right, Shift+Tab left. */
+let editMode = false;
+const isNav = el => el && el.classList && el.classList.contains('nav');
+function navCells(tr) { return Array.from(tr.querySelectorAll('.nav')).filter(n => n.getClientRects().length); }
+function moveSel(el, dr, dc) {
+  const tr = el.closest('tr');
+  const cells = navCells(tr);
+  const i = cells.indexOf(el);
+  let target = null;
+  if (dc) target = cells[i + dc] || null;
+  if (dr) {
+    const r = dr < 0 ? tr.previousElementSibling : tr.nextElementSibling;
+    if (r) { const c2 = navCells(r); target = c2[Math.min(i, c2.length - 1)] || null; }
+  }
+  if (target) { target.focus(); target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+  else if (el.tagName === 'INPUT') el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+// Short boxes in the Task cell (ID_Item, Owner, Project No, Duration) are as wide as their text
+const fitCtx = document.createElement('canvas').getContext('2d');
+function fitInput(el) {
+  if (!el.classList.contains('fit') || el.dataset.fw === el.value) return;
+  const cs = getComputedStyle(el);
+  if (!cs.fontSize) return;
+  fitCtx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+  const w = fitCtx.measureText(el.value || 'xx').width;
+  el.style.width = Math.ceil(w + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 2) + 'px';
+  el.dataset.fw = el.value;
+}
+function commitDate(el) {
+  const s = el.value.trim();
+  if (!s) { el.dataset.iso = ''; return; }
+  const iso = parseFlexDate(s);
+  if (iso) { el.dataset.iso = iso; el.value = isoToShow(iso); el.classList.remove('bad'); el.classList.toggle('deft', false); }
+  else {
+    el.value = isoToShow(el.dataset.iso);
+    el.classList.add('bad');
+    el.title = 'Not a date: "' + s + '". Type 26Nov20, 2026-11-20 or 20/11/2026.';
+    setTimeout(() => { el.classList.remove('bad'); el.title = ''; }, 2500);
+  }
+}
+
+$('tbody').addEventListener('pointerdown', e => {
+  const el = e.target;
+  if (!isNav(el) || el.tagName !== 'INPUT') return;
+  if (document.activeElement === el) { editMode = true; return; }   // second click: edit at the cursor
+  if (e.pointerType === 'mouse') { e.preventDefault(); el.focus(); }  // first click: select the cell
+});
+$('tbody').addEventListener('focusin', e => {
+  const el = e.target;
+  if (!isNav(el)) return;
+  editMode = false;
+  if (el.tagName === 'INPUT') {
+    if (el.classList.contains('dt')) { el.value = isoToShow(el.dataset.iso); el.classList.remove('deft'); }   // the shown default time is not part of the value
+    el.dataset.orig = el.value;
+    el.select();
+    setTimeout(() => { if (document.activeElement === el && !editMode) el.select(); }, 0);
+  }
+});
+$('tbody').addEventListener('keydown', e => {
+  const el = e.target;
+  if (!isNav(el)) return;
+  const isIn = el.tagName === 'INPUT', k = e.key;
+  if (el.classList.contains('dt') && (k === 'F4' || (e.altKey && k === 'ArrowDown'))) { e.preventDefault(); openPicker(el); return; }
+  if (k === 'F2' && isIn) { e.preventDefault(); editMode = true; const n = el.value.length; el.setSelectionRange(n, n); return; }
+  if (k === 'Escape' && isIn) {
+    e.preventDefault();
+    if (el.value !== el.dataset.orig) { el.value = el.dataset.orig; fitInput(el); el.dispatchEvent(new Event('input', { bubbles: true })); }
+    editMode = false; el.select(); return;
+  }
+  if (k === 'Enter') { e.preventDefault(); moveSel(el, e.shiftKey ? -1 : 1, 0); return; }
+  if (k === 'Tab') { e.preventDefault(); moveSel(el, 0, e.shiftKey ? -1 : 1); return; }
+  const dir = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
+  if (dir && (!isIn || !editMode || dir[0])) { e.preventDefault(); moveSel(el, dir[0], dir[1]); return; }
+  if (isIn && !editMode && !e.ctrlKey && !e.metaKey && !e.altKey && (k.length === 1 || k === 'Backspace' || k === 'Delete')) editMode = true;
+});
+$('tbody').addEventListener('input', e => { if (isNav(e.target)) fitInput(e.target); });
+$('tbody').addEventListener('focusout', e => { if (isNav(e.target) && e.target.classList.contains('dt')) showDateCell(e.target); });
+function showDateCell(el) {
+  const def = timeOf(el.dataset.iso) === null && el.dataset.iso && el.dataset.defh !== '';
+  el.value = isoToShow(el.dataset.iso, el.dataset.iso && timeOf(el.dataset.iso) === null ? el.dataset.defh : null);
+  el.classList.toggle('deft', !!def);
+}
+// Runs before the recalc listener on appBox, so the schedule sees the tidied value
+$('tbody').addEventListener('change', e => {
+  const el = e.target;
+  if (!isNav(el) || el.tagName !== 'INPUT') return;
+  if (el.classList.contains('dt')) commitDate(el);
+  else if (el.dataset.f === 'dur') { const d = fmtDur(el.value); if (d) el.value = d; fitInput(el); }
+  el.dataset.orig = el.value;
+});
+
 function nextId() {
   const used = new Set(Array.from(document.querySelectorAll('[data-f="id"]')).map(i => i.value.trim()));
   let n = 1;
@@ -366,7 +535,7 @@ function loadSample() {
 // Raw values from the table rows, including the Excel columns the scheduler does not use
 function rowsRaw() {
   return Array.from(document.querySelectorAll('#tbody tr')).map(tr => {
-    const v = n => tr.querySelector('[data-f="' + n + '"]').value.trim();
+    const v = n => { const i = tr.querySelector('[data-f="' + n + '"]'); return String(i.classList.contains('dt') ? (i.dataset.iso || '') : i.value).trim(); };
     return {
       id: v('id'), name: v('name'), res: v('res'), dur: v('dur'), due: v('due'), preds: v('preds'), fixed: v('fixed'),
       extra: Object.assign(JSON.parse(tr.dataset.extra || '{}'),
@@ -380,11 +549,11 @@ function readTasks() {
     id: r.id || '?',
     name: r.name || '(unnamed)',
     res: r.res || 'Team',
-    dur: Math.max(0, parseFloat(r.dur) || 0),
-    due: parseDate(r.due),
+    dur: Math.max(0, parseFloat(String(r.dur).replace(',', '.')) || 0),
+    due: parseDate(r.due), dueH: timeOf(r.due),
     pri: i + 1,
     preds: r.preds.split(/[,;\s]+/).filter(Boolean),
-    fixed: parseDate(r.fixed),
+    fixed: parseDate(r.fixed), fixedH: timeOf(r.fixed),
     projectNo: String((r.extra && r.extra.project_no) || '').slice(0, 20),
     idx: i
   }));
@@ -402,8 +571,9 @@ function schedule(list, over, startDate) {
 
   const T = list.map((t, i) => ({
     ...t, idx: i, rem: t.dur, fin: null, first: null, ready: null, wait: 0, segs: [],
-    fixedAbs: t.fixed ? Math.max(0, dayIndex(t.fixed)) * 24 : -Infinity,
-    dueAbs: t.due ? (dayIndex(t.due) + 1) * 24 : null
+    // no time entered: fixed start = start of that working day; Pdd (probable due date) = noon
+    fixedAbs: t.fixed ? Math.max(0, dayIndex(t.fixed) * 24 + (t.fixedH ?? 0)) : -Infinity,
+    dueAbs: t.due ? dayIndex(t.due) * 24 + (t.dueH ?? PDD_DEFAULT_H) : null
   }));
   const byId = new Map(T.map(t => [t.id, t]));
   T.forEach(t => {
@@ -466,14 +636,13 @@ function anchorDate(list, over) {
 function fmtAbs(h, startDate) {
   const d = Math.floor(h / 24), hr = h - d * 24;
   const dt = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + d);
-  const hh = Math.floor(hr + 1e-9), mm = Math.round((hr - hh) * 60);
-  return DN[dt.getDay()] + ' ' + dt.getDate() + ' ' + MN[dt.getMonth()] + ' ' + pad(hh) + ':' + pad(mm);
+  return fmtYMD(dt) + ' ' + fmtHM(hr);   // yymmmdd HH:MM, 24-hour
 }
-function fmtDay(dt) { return DN[dt.getDay()] + ' ' + dt.getDate() + ' ' + MN[dt.getMonth()]; }
 
 /* ---------- render ---------- */
 function recalc() {
   renumber();
+  document.querySelectorAll('#tbody input.fit').forEach(fitInput);
   const over = readCalendar();
   const list = readTasks();
   const startDate = anchorDate(list, over);
@@ -506,6 +675,24 @@ function recalc() {
     set('finish', ok ? fmtAbs(x.fin, startDate) : '–');
     set('wait', x.wait.toFixed(2));
     set('margin', (ok && x.dueAbs !== null) ? ((x.dueAbs - x.fin) / 24).toFixed(2) : '–');
+    // Time shown when only a date was entered:
+    //  Fixed start = finish of the predecessor (after leveling) if it falls on that day, else the start of that working day.
+    //  (follows the calendar and its overrides; a day off shows no time).
+    //  Pdd (probable due date) = noon.
+    const dIdx = dt => Math.round((dt - startDate) / 86400000);
+    const fx = tr.querySelector('[data-f="fixed"]'), du = tr.querySelector('[data-f="due"]');
+    let fDef = '';
+    if (x.fixed && x.fixedH === null) {
+      const d = dIdx(x.fixed), w = res.dayWin(d);
+      if (w) {
+        fDef = w.s;
+        const pf = x.predT.reduce((m, p) => (p.fin !== null && p.fin > m ? p.fin : m), -Infinity);
+        if (pf > d * 24 + w.s && pf <= d * 24 + w.e) fDef = pf - d * 24;
+      }
+    }
+    const dDef = x.due && x.dueH === null ? PDD_DEFAULT_H : '';
+    if (fx) { fx.dataset.defh = fDef; if (fx !== document.activeElement) showDateCell(fx); }
+    if (du) { du.dataset.defh = dDef; if (du !== document.activeElement) showDateCell(du); }
     set('sched', (!ok ? '<span class="late">Not scheduled</span>' : x.isLate ? '<span class="late">Late</span>' : '<span class="ok">On time</span>') + why);
   });
 
@@ -576,6 +763,8 @@ function drawGantt(T, startDate, dayWin) {
     }
   }
 
+  ganttW = Math.ceil(W);
+  applyWidths();
   const th = document.querySelector('#headRow th.c-gantt');
   if (th) th.innerHTML = '<div class="g-track" style="width:' + W + 'px">' + head + '</div>';
   const trs = Array.from(document.querySelectorAll('#tbody tr'));
@@ -589,7 +778,7 @@ function drawGantt(T, startDate, dayWin) {
               esc(x.id) + ': ' + fmtAbs(s.s, startDate) + ' to ' + fmtAbs(s.e, startDate) + '"></div>';
     });
     if (x.dueAbs !== null) {
-      html += '<div class="due" style="left:' + xOf(x.dueAbs).toFixed(2) + 'px" title="Due ' + (x.due ? fmtDay(x.due) : '') + '"></div>';
+      html += '<div class="due" style="left:' + xOf(x.dueAbs).toFixed(2) + 'px" title="Pdd ' + fmtAbs(x.dueAbs, startDate) + '"></div>';
     }
     td.innerHTML = html + '</div>';
   });
@@ -599,19 +788,117 @@ function drawGantt(T, startDate, dayWin) {
 // 0-based positions in the 15-column Excel layout
 const COL = { id_label: 0, item: 1, status: 2, project_no: 3, phase: 4, task_date: 5, name: 6, other: 7, description: 8, res: 9, dur: 10, due: 11, preds: 13, id: 14 };
 
+// Accepts 26Nov20, 2026-11-20, 20/11/2026 or an Excel serial, each with an optional 24-hour time (14:30).
+// Returns 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM', or '' when it is not a date.
 function parseFlexDate(s) {
   s = String(s || '').trim();
   if (!s) return '';
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return ymd(+m[1], +m[2], +m[3]);
-  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);       // day/month/year
-  if (m) return ymd(+m[3], +m[2], +m[1]);
-  if (/^\d{5}$/.test(s)) {                                         // Excel serial date
-    const dt = new Date(1899, 11, 30 + (+s));
-    return ymd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+  if (/^\d{5}(\.\d+)?$/.test(s)) {                                // Excel serial date, fraction = time of day
+    const n = +s, dt = new Date(1899, 11, 30 + Math.floor(n)), mins = Math.round((n - Math.floor(n)) * 1440);
+    return ymd(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()) + (mins ? ' ' + pad(Math.floor(mins / 60)) + ':' + pad(mins % 60) : '');
   }
-  return '';
+  let time = '';
+  const tm = s.match(/^(.*?)(?:\s+|T)(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (tm) {
+    if (+tm[2] > 23 || +tm[3] > 59) return '';
+    time = ' ' + pad(+tm[2]) + ':' + tm[3];
+    s = tm[1].trim();
+  }
+  let y, mo, d, m;
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+  else if ((m = s.match(/^(\d{2})[\s\-]?([A-Za-z]{3})[\s\-]?(\d{1,2})$/))) {     // yymmmdd, e.g. 26Nov20
+    y = 2000 + (+m[1]); mo = MN.findIndex(n => n.toLowerCase() === m[2].toLowerCase()) + 1; d = +m[3];
+  }
+  else if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))) { y = +m[3]; mo = +m[2]; d = +m[1]; }   // day/month/year
+  else return '';
+  const dt = new Date(y, mo - 1, d);
+  if (!mo || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+  return ymd(y, mo, d) + time;
 }
+
+/* ---------- date and time picker (24-hour) for Pdd and Fixed start ---------- */
+let pick = null;   // { el, y, m, sel }
+function openPicker(el) {
+  closePicker();
+  const iso = el.dataset.iso || '';
+  const base = parseDate(iso) || new Date();
+  const h = timeOf(iso) ?? (el.dataset.defh !== '' && el.dataset.defh !== undefined ? +el.dataset.defh : null);
+  pick = { el: el, y: base.getFullYear(), m: base.getMonth(), sel: iso ? iso.slice(0, 10) : '', h: h };
+  const box = document.createElement('div');
+  box.id = 'dtp';
+  box.className = 'dtp';
+  document.body.appendChild(box);
+  drawPicker();
+  const r = el.closest('td').getBoundingClientRect();
+  const bw = box.offsetWidth, bh = box.offsetHeight;
+  box.style.left = Math.max(4, Math.min(r.left, window.innerWidth - bw - 4)) + 'px';
+  box.style.top = (r.bottom + bh + 4 > window.innerHeight ? Math.max(4, r.top - bh - 4) : r.bottom + 2) + 'px';
+}
+function drawPicker() {
+  const box = $('dtp');
+  if (!box || !pick) return;
+  const first = new Date(pick.y, pick.m, 1);
+  const lead = first.getDay();                                // weeks start on Sunday
+  const days = new Date(pick.y, pick.m + 1, 0).getDate();
+  const today = fmtKey(new Date());
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span></span>';
+  for (let d = 1; d <= days; d++) {
+    const k = ymd(pick.y, pick.m + 1, d);
+    cells += '<button type="button" data-d="' + k + '" class="' + (k === pick.sel ? 'on' : '') + (k === today ? ' today' : '') + '">' + d + '</button>';
+  }
+  const hh = pick.h === null ? '' : pad(Math.floor(Math.round(pick.h * 60) / 60));
+  const mm = pick.h === null ? '' : pad(Math.round(pick.h * 60) % 60);
+  let hOpts = '<option value="">--</option>', mOpts = '<option value="">--</option>';
+  for (let i = 0; i < 24; i++) hOpts += '<option' + (pad(i) === hh ? ' selected' : '') + '>' + pad(i) + '</option>';
+  const mins = ['00', '15', '30', '45'];
+  if (mm && !mins.includes(mm)) mins.push(mm);
+  mins.forEach(v => { mOpts += '<option' + (v === mm ? ' selected' : '') + '>' + v + '</option>'; });
+  box.innerHTML =
+    '<div class="dtp-h"><button type="button" data-nav="-1">‹</button><b>' + MN[pick.m] + ' ' + pick.y + '</b><button type="button" data-nav="1">›</button></div>' +
+    '<div class="dtp-g">' + ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => '<i>' + d + '</i>').join('') + cells + '</div>' +
+    '<div class="dtp-t">Time <select id="dtpH">' + hOpts + '</select>:<select id="dtpM">' + mOpts + '</select>' +
+    '<button type="button" data-act="def" title="Use the default time from the schedule">Default</button></div>' +
+    '<div class="dtp-b"><button type="button" data-act="clear">Clear</button><button type="button" data-act="cancel">Cancel</button><button type="button" data-act="ok" class="pri">OK</button></div>';
+}
+function readPickerTime() {
+  const H = $('dtpH').value, M = $('dtpM').value;
+  pick.h = H === '' ? null : (+H) + (+(M || 0)) / 60;
+}
+function applyPicker(value) {
+  const el = pick.el;
+  closePicker();
+  el.focus();
+  el.value = value;
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.select();
+}
+function closePicker() { const b = $('dtp'); if (b) b.remove(); pick = null; }
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.dtb');
+  if (btn) { const el = btn.parentNode.querySelector('.dt'); if (pick && pick.el === el) closePicker(); else openPicker(el); return; }
+  if (!pick) return;
+  const box = $('dtp');
+  if (!box.contains(e.target)) { closePicker(); return; }
+  const nav = e.target.closest('[data-nav]'), day = e.target.closest('[data-d]'), act = e.target.closest('[data-act]');
+  if (nav) { readPickerTime(); pick.m += +nav.dataset.nav; if (pick.m < 0) { pick.m = 11; pick.y--; } if (pick.m > 11) { pick.m = 0; pick.y++; } drawPicker(); }
+  else if (day) { readPickerTime(); pick.sel = day.dataset.d; drawPicker(); }
+  else if (act) {
+    const a = act.dataset.act;
+    if (a === 'cancel') { const el = pick.el; closePicker(); el.focus(); }
+    else if (a === 'clear') applyPicker('');
+    else if (a === 'def') { pick.h = null; drawPicker(); }
+    else if (a === 'ok') {
+      readPickerTime();
+      if (!pick.sel) { closePicker(); return; }
+      applyPicker(isoToShow(pick.sel + (pick.h === null ? '' : ' ' + fmtHM(pick.h))));
+    }
+  }
+});
+document.addEventListener('change', e => { if (pick && e.target.closest('#dtp')) { e.stopPropagation(); readPickerTime(); } }, true);
+document.addEventListener('keydown', e => { if (pick && e.key === 'Escape') { const el = pick.el; closePicker(); el.focus(); e.stopPropagation(); } }, true);
+window.addEventListener('scroll', () => { if (pick) closePicker(); }, true);
 
 function parsePaste(text) {
   const out = [];

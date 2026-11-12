@@ -111,6 +111,29 @@ function norm_date($value)
     return $s;
 }
 
+/**
+ * Date with an optional 24-hour time: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM'.
+ * Returns [date, time] (time 'HH:MM:00' or null; both null when empty), or false when invalid.
+ */
+function norm_datetime($value)
+{
+    $s = trim((string) ($value ?? ''));
+    if ($s === '') {
+        return [null, null];
+    }
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/', $s, $m)
+        || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+        return false;
+    }
+    if (!isset($m[4])) {
+        return [substr($s, 0, 10), null];
+    }
+    if ((int) $m[4] > 23 || (int) $m[5] > 59) {
+        return false;
+    }
+    return [substr($s, 0, 10), $m[4] . ':' . $m[5] . ':00'];
+}
+
 function csrf_token(): string
 {
     if (empty($_SESSION['csrf'])) {

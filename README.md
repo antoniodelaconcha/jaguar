@@ -14,7 +14,8 @@ Live: https://nahuatl.greenpointengineering.ca/azteca/jaguar/
 `private/config.php` is not in the repo (it holds the database password).
 Copy `private/config.example.php` to `config.php` on the server and fill in the values.
 
-Not yet in the repo: `database/schema.sql` and `DEPLOY.md`.
+Not yet in the repo: `database/schema.sql` and `DEPLOY.md`. Database changes per version are in `database/migrations/`.
+Field names (table header / code / database column): see `FIELDS.md`.
 
 ## Versions
 

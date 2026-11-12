@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.1 - 2026-11-12 - Excel-style table, Pdd, 24-hour date and time
+Files: public/index.html, public/assets/app.js, public/assets/app.css, public/api/index.php, private/src/lib.php.
+Database: database/migrations/v3.1.sql (adds tasks.due_time and tasks.fixed_time; run before the PHP files).
+- Task cell grouped: line 1 ID_Item + Task, line 2 Owner · Project No · Dur h. Separate columns for these removed.
+- Flat Excel-style cells (no input boxes); column widths set by dragging the header edge, kept per device.
+- Entering a cell selects all its text so typing overwrites; arrow keys, Enter, Tab move between cells; F2 edits; Esc undoes.
+- Due renamed Pdd (probable due date). Pdd without a time = noon (12:00), also for late/on-time.
+- Dates shown as yymmmdd HH:MM, 24-hour. Pdd and Fixed start take an optional time (saved in new columns).
+  Fixed start without a time shows (grey, not saved) the predecessor's finish that day, else the start of that working day.
+- Date and time pop-up (calendar button or Alt+Down), weeks starting on Sunday, 15-minute steps.
+- Theme colour #00B050. Asset links carry ?v=3.1 so browsers load the new files.
+- FIELDS.md added: table header / code key / database column map.
+
 ## v3.0 - 2026-11-11 - single table with Gantt
 Files: public/index.html, public/assets/app.js, public/assets/app.css. Back end unchanged.
 - Tasks, schedule results and the Gantt chart are now one table: each task is one row with its bar.

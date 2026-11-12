@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#00B050">
 <title>Jaguar Task Scheduler</title>
-<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/app.css?v=3.1">
 </head>
 <body>
 <header class="top">
@@ -40,7 +41,7 @@
     <button id="logoutBtn" type="button">Log out</button>
   </div>
 
-  <div class="sub">Forward scheduling on a work calendar, with resource leveling by priority. Priority comes from row position: the top row is priority 1 (most important). Drag a row up or down to change its priority: with the mouse, press and drag; on a phone, press and hold the row, then slide it (or slide the ⋮⋮ handle right away). Your data is saved to your account.</div>
+  <div class="sub">Forward scheduling on a work calendar, with resource leveling by priority. Priority comes from row position: the top row is priority 1 (most important). Drag a row up or down by its ⋮⋮ handle or priority number to change its priority (on a phone, slide the ⋮⋮ handle, or press and hold the row, then slide it). Your data is saved to your account.</div>
 
   <div class="tabs">
     <button class="tabbtn" data-tab="tab-cal" type="button">Calendar</button>
@@ -62,7 +63,7 @@
     <fieldset>
       <legend>Tasks</legend>
       <div style="margin-bottom:12px">
-        <label class="f">Paste from Excel: 15 columns in this order, copied without a header row or with one (it is skipped): ID, Item, Status, Project No, Phase, Date, Task, Other, Description, Owner, Duration, Due, Priority, Predecessor, ID_Item
+        <label class="f">Paste from Excel: 15 columns in this order, copied without a header row or with one (it is skipped): ID, Item, Status, Project No, Phase, Date, Task, Other, Description, Owner, Duration, Due (read as Pdd), Priority, Predecessor, ID_Item
           <textarea id="paste" placeholder="Paste rows here"></textarea></label>
         <div class="row" style="margin-top:6px">
           <button id="pasteAppend" type="button">Append rows</button>
@@ -85,7 +86,7 @@
         <span><span class="sw" style="background:var(--ok)"></span>On time</span>
         <span><span class="sw" style="background:var(--late)"></span>Late</span>
         <span><span class="sw" style="background:var(--off);border:1px solid #ddd"></span>Non-working day</span>
-        <span><span class="sw" style="border-left:2px dashed #111;width:0"></span>Due (end of day)</span>
+        <span><span class="sw" style="border-left:2px dashed #111;width:0"></span>Pdd (probable due date)</span>
       </div>
       <div class="tbl">
         <table id="taskTable">
@@ -97,7 +98,8 @@
         <button id="addBtn" type="button">+ Add task</button>
         <button id="resetBtn" type="button">Reload sample</button>
       </div>
-      <div class="note">Duration is in working hours. Due dates are the end of that day. New tasks go to the bottom (lowest priority) until you drag them up. Predecessors are comma-separated ID_Item values. Fixed start is optional and means the task cannot start before that day at the day-start hour. Use Columns to hide or show columns; your choice is kept on this device.</div>
+      <div class="note">Duration is in working hours. New tasks go to the bottom (lowest priority) until you drag them up. Predecessors are comma-separated ID_Item values. Fixed start is optional and means the task cannot start before that date and time. Use Columns to hide or show columns, and drag the right edge of a header to change its width (double-click the edge for the default); both are kept on this device.</div>
+      <div class="note">Cells work like Excel: click a cell or move to it with the arrow keys and its text is selected, so typing replaces it. F2 or a second click edits inside the text. Enter moves down, Tab moves right, Esc undoes the edit. Dates and times show as yymmmdd HH:MM on a 24-hour clock (26Nov20 14:30). Type them that way, as 2026-11-20 14:30 or as 20/11/2026 14:30, or pick them with the calendar button in the cell (or Alt+Down). If you type only a date, the time is a default from the schedule, shown in grey and not saved: for Fixed start it is the predecessor's finish (after leveling) if that falls on the same day, otherwise the start of that working day; this follows the calendar and its overrides. For Pdd (probable due date) it is noon (12:00); a task finishing after its Pdd is late.</div>
     </fieldset>
 
     <div class="note">Waiting = working hours a task was ready (predecessors done, fixed start passed) but its resource was working on something with higher priority.</div>
@@ -119,6 +121,6 @@
   </fieldset>
 </div>
 
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=3.1"></script>
 </body>
 </html>

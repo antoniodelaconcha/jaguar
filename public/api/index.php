@@ -192,9 +192,9 @@ function get_tasks(array $u): array
         'name' => (string) $r['task'],
         'res' => (string) $r['owner'],
         'dur' => (float) $r['duration_h'],
-        'due' => (string) ($r['due_date'] ?? ''),
+        'due' => with_time($r['due_date'] ?? null, $r['due_time'] ?? null),
         'preds' => (string) $r['predecessor'],
-        'fixed' => (string) ($r['fixed_start'] ?? ''),
+        'fixed' => with_time($r['fixed_start'] ?? null, $r['fixed_time'] ?? null),
         'extra' => [
             'id_label' => (string) $r['id_label'],
             'item' => (string) $r['item'],
@@ -206,6 +206,13 @@ function get_tasks(array $u): array
             'description' => (string) $r['description'],
         ],
     ], $st->fetchAll());
+}
+
+/** 'YYYY-MM-DD' plus ' HH:MM' when a time was entered. */
+function with_time($date, $time): string
+{
+    $d = (string) ($date ?? '');
+    return ($d !== '' && $time !== null && $time !== '') ? $d . ' ' . substr((string) $time, 0, 5) : $d;
 }
 
 /** Replaces this user's whole task list in one transaction (the front end always sends the full list). */
@@ -246,10 +253,10 @@ function save_tasks(array $u): void
             $errors[] = "Row $n: duration must be between 0 and 100000 hours.";
             continue;
         }
-        $due = norm_date($r['due'] ?? '');
-        $fixed = norm_date($r['fixed'] ?? '');
+        $due = norm_datetime($r['due'] ?? '');
+        $fixed = norm_datetime($r['fixed'] ?? '');
         if ($due === false || $fixed === false) {
-            $errors[] = "Row $n: dates must look like YYYY-MM-DD.";
+            $errors[] = "Row $n: dates must look like YYYY-MM-DD or YYYY-MM-DD HH:MM.";
             continue;
         }
         $x = is_array($r['extra'] ?? null) ? $r['extra'] : [];
@@ -270,9 +277,11 @@ function save_tasks(array $u): void
             clean_str($x['description'] ?? '', 2000),
             clean_str($r['res'] ?? '', 120) ?: 'Team',
             $dur,
-            $due,
+            $due[0],
+            $due[1],
             clean_str($r['preds'] ?? '', 255),
-            $fixed,
+            $fixed[0],
+            $fixed[1],
         ];
     }
 
@@ -287,8 +296,9 @@ function save_tasks(array $u): void
             ->execute([$u['tenant_id'], $u['id']]);
         $ins = $pdo->prepare(
             'INSERT INTO tasks (tenant_id, user_id, position, id_item, id_label, item, status, project_no, phase,
-                                task_date, task, other, description, owner, duration_h, due_date, predecessor, fixed_start)
-             VALUES (' . implode(',', array_fill(0, 18, '?')) . ')'
+                                task_date, task, other, description, owner, duration_h, due_date, due_time, predecessor,
+                                fixed_start, fixed_time)
+             VALUES (' . implode(',', array_fill(0, 20, '?')) . ')'
         );
         foreach ($values as $v) {
             $ins->execute($v);
