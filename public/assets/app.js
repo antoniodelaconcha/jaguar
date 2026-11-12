@@ -184,60 +184,171 @@ function renumber() {
   });
 }
 
+/* One table: task inputs, schedule results and the Gantt bar share each row.
+ * f = scheduler field, x = Excel column kept in "extra", out = result filled by recalc. */
+const COLS = [
+  { k: 'grip', label: '', fixed: true, stk: true },
+  { k: 'pri', label: 'Priority', stk: true },
+  { k: 'id', label: 'ID_Item', f: 'id', cls: 's', stk: true },
+  { k: 'name', label: 'Task', f: 'name', cls: 'n', stk: true },
+  { k: 'project_no', label: 'Project No', x: 'project_no', cls: 's' },
+  { k: 'res', label: 'Resource', f: 'res' },
+  { k: 'dur', label: 'Duration (h)', f: 'dur', cls: 's', num: true },
+  { k: 'due', label: 'Due', f: 'due', cls: 'd', date: true },
+  { k: 'preds', label: 'Predecessors', f: 'preds', cls: 'w' },
+  { k: 'fixed', label: 'Fixed start', f: 'fixed', cls: 'd', date: true },
+  { k: 'id_label', label: 'ID', x: 'id_label', cls: 's', hide: true },
+  { k: 'item', label: 'Item', x: 'item', hide: true },
+  { k: 'status', label: 'Status', x: 'status', cls: 's', hide: true },
+  { k: 'phase', label: 'Phase', x: 'phase', hide: true },
+  { k: 'task_date', label: 'Date', x: 'task_date', cls: 'w', hide: true },
+  { k: 'other', label: 'Other', x: 'other', hide: true },
+  { k: 'description', label: 'Description', x: 'description', cls: 'n', hide: true },
+  { k: 'start', label: 'Start', out: true },
+  { k: 'finish', label: 'Finish', out: true },
+  { k: 'wait', label: 'Waiting (h)', out: true, hide: true },
+  { k: 'margin', label: 'Margin (cal. days)', out: true, hide: true },
+  { k: 'sched', label: 'Schedule', out: true },
+  { k: 'del', label: '', fixed: true },
+  { k: 'gantt', label: 'Gantt' }
+];
+const COLS_KEY = 'jaguar.hiddenCols';
+let hiddenCols = new Set(COLS.filter(c => c.hide).map(c => c.k));
+try { const saved = JSON.parse(localStorage.getItem(COLS_KEY)); if (Array.isArray(saved)) hiddenCols = new Set(saved); } catch (e) { /* keep defaults */ }
+
+function cellHtml(c, t, x) {
+  if (c.k === 'grip') return '<span class="grip" title="Drag to change priority">⋮⋮</span>';
+  if (c.k === 'pri') return '–';
+  if (c.k === 'del') return '<button class="x" type="button" title="Remove">✕</button>';
+  if (c.f || c.x) {
+    const val = c.f ? t[c.f] : x[c.x];
+    const type = c.num ? ' type="number" step="0.25" min="0"' : c.date ? ' type="date"' : '';
+    return '<input ' + (c.f ? 'data-f="' + c.f : 'data-x="' + c.x) + '"' + (c.cls ? ' class="' + c.cls + '"' : '') + type + ' value="' + esc(val) + '">';
+  }
+  return '';
+}
+
+function buildHead() {
+  $('headRow').innerHTML = COLS.map(c => '<th class="c-' + c.k + (c.stk ? ' stk' : '') + '">' + esc(c.label) + '</th>').join('');
+}
+
+function buildColMenu() {
+  $('colBox').innerHTML = COLS.filter(c => !c.fixed).map(c =>
+    '<label><input type="checkbox" data-col="' + c.k + '"' + (hiddenCols.has(c.k) ? '' : ' checked') + '> ' + esc(c.label) + '</label>').join('');
+  $('colBox').addEventListener('change', e => {
+    e.stopPropagation();                              // showing/hiding columns is not a task edit: no recalc, no save
+    const cb = e.target.closest('[data-col]');
+    if (!cb) return;
+    if (cb.checked) hiddenCols.delete(cb.dataset.col); else hiddenCols.add(cb.dataset.col);
+    try { localStorage.setItem(COLS_KEY, JSON.stringify(Array.from(hiddenCols))); } catch (err) { /* not kept on this device */ }
+    applyCols();
+  });
+  $('colBox').addEventListener('input', e => e.stopPropagation());
+}
+
+function applyCols() {
+  let st = $('colStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'colStyle'; document.head.appendChild(st); }
+  st.textContent = Array.from(hiddenCols).map(k => '#taskTable .c-' + k + '{display:none}').join('');
+  applySticky();
+}
+
+// Keeps the visible ⋮⋮ / Priority / ID_Item / Task columns fixed on the left while the Gantt scrolls (wide screens only, see CSS)
+function applySticky() {
+  let st = $('stkStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'stkStyle'; document.head.appendChild(st); }
+  let left = 0, css = '';
+  for (const c of COLS.filter(c => c.stk && !hiddenCols.has(c.k))) {
+    const th = document.querySelector('#headRow th.c-' + c.k);
+    const w = th ? th.getBoundingClientRect().width : 0;
+    if (!w) return;                                   // table not on screen (other tab): keep the last offsets
+    css += '#taskTable .c-' + c.k + '{left:' + left.toFixed(1) + 'px}';
+    left += w;
+  }
+  st.textContent = css;
+}
+
 function makeRow(t) {
   const tr = document.createElement('tr');
-  tr.dataset.extra = JSON.stringify(t.extra || {});
-  tr.innerHTML =
-    '<td><span class="grip" title="Drag to change priority">⋮⋮</span><button class="mb" data-d="-1" type="button" title="Move up">▲</button><button class="mb" data-d="1" type="button" title="Move down">▼</button></td>' +
-    '<td><input data-f="id" class="s" value="' + esc(t.id) + '"></td>' +
-    '<td><input data-f="name" class="n" value="' + esc(t.name) + '"></td>' +
-    '<td><input data-f="res" value="' + esc(t.res) + '"></td>' +
-    '<td><input data-f="dur" class="s" type="number" step="0.25" min="0" value="' + esc(t.dur) + '"></td>' +
-    '<td><input data-f="due" class="d" type="date" value="' + esc(t.due) + '"></td>' +
-    '<td class="pri-cell">–</td>' +
-    '<td><input data-f="preds" class="w" value="' + esc(t.preds) + '"></td>' +
-    '<td><input data-f="fixed" class="d" type="date" value="' + esc(t.fixed) + '"></td>' +
-    '<td><button class="x" type="button" title="Remove">✕</button></td>';
-
+  const x = t.extra || {};
+  tr.dataset.extra = JSON.stringify(x);
+  tr.innerHTML = COLS.map(c => '<td class="c-' + c.k + (c.stk ? ' stk' : '') + (c.k === 'pri' ? ' pri-cell' : '') + '">' + cellHtml(c, t, x) + '</td>').join('');
   tr.querySelector('.x').addEventListener('click', () => { tr.remove(); recalc(); });
-
-  // ▲ / ▼ buttons: move one position at a time (works on any device)
-  tr.querySelectorAll('.mb').forEach(b => b.addEventListener('click', () => {
-    const d = parseInt(b.dataset.d, 10);
-    if (d < 0) { const prev = tr.previousElementSibling; if (prev) tr.parentNode.insertBefore(tr, prev); }
-    else { const next = tr.nextElementSibling; if (next) tr.parentNode.insertBefore(next, tr); }
-    recalc();
-  }));
-
-  // drag handle: pointer events work with mouse and touch
-  const grip = tr.querySelector('.grip');
-  grip.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    grip.setPointerCapture(e.pointerId);
-    tr.classList.add('dragging');
-    const move = ev => {
-      const el = document.elementFromPoint(ev.clientX, ev.clientY);
-      const over = el && el.closest ? el.closest('#tbody tr') : null;
-      if (over && over !== tr && over.parentNode === tr.parentNode) {
-        const r = over.getBoundingClientRect();
-        if (ev.clientY < r.top + r.height / 2) over.parentNode.insertBefore(tr, over);
-        else over.parentNode.insertBefore(tr, over.nextSibling);
-        renumber();
-      }
-    };
-    const up = () => {
-      tr.classList.remove('dragging');
-      grip.removeEventListener('pointermove', move);
-      grip.removeEventListener('pointerup', up);
-      grip.removeEventListener('pointercancel', up);
-      recalc();
-    };
-    grip.addEventListener('pointermove', move);
-    grip.addEventListener('pointerup', up);
-    grip.addEventListener('pointercancel', up);
-  });
+  tr.addEventListener('pointerdown', e => pressRow(tr, e));
   return tr;
 }
+
+/* ---------- drag rows to change priority (mouse and touch, no arrows) ----------
+ * Mouse: press anywhere on the row (not in a box) and drag.
+ * Touch: press and hold the row for a moment, then slide; or slide the ⋮⋮ handle right away.
+ * A quick swipe on a phone still scrolls the page. */
+let dragActive = false;
+let pressPending = false;
+const HOLD_MS = 350, SLOP = 8;
+
+function pressRow(tr, e) {
+  if (dragActive) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.target.closest('input,textarea,select,button,a')) return;
+  if (e.pointerType === 'mouse' || e.target.closest('.grip')) { e.preventDefault(); startDrag(tr, e); return; }
+  const x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+  pressPending = true;
+  const done = () => {
+    pressPending = false;
+    clearTimeout(timer);
+    document.removeEventListener('pointermove', mv);
+    document.removeEventListener('pointerup', done);
+    document.removeEventListener('pointercancel', done);
+  };
+  const mv = ev => { if (ev.pointerId === id && (Math.abs(ev.clientX - x0) > SLOP || Math.abs(ev.clientY - y0) > SLOP)) done(); };
+  const timer = setTimeout(() => { done(); startDrag(tr, e); }, HOLD_MS);
+  document.addEventListener('pointermove', mv);
+  document.addEventListener('pointerup', done);
+  document.addEventListener('pointercancel', done);
+}
+
+function startDrag(tr, e) {
+  const id = e.pointerId;
+  const before = Array.from(tr.parentNode.children);
+  dragActive = true;
+  tr.classList.add('dragging');
+  document.body.classList.add('dragging-on');
+  if (e.pointerType !== 'mouse' && navigator.vibrate) { try { navigator.vibrate(15); } catch (err) { /* no vibration */ } }
+  const move = ev => {
+    if (ev.pointerId !== id) return;
+    ev.preventDefault();
+    if (ev.clientY < 50) window.scrollBy(0, -12);
+    else if (ev.clientY > window.innerHeight - 50) window.scrollBy(0, 12);
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const over = el && el.closest ? el.closest('#tbody tr') : null;
+    if (over && over !== tr && over.parentNode === tr.parentNode) {
+      const r = over.getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) over.parentNode.insertBefore(tr, over);
+      else over.parentNode.insertBefore(tr, over.nextSibling);
+      renumber();
+    }
+  };
+  const up = ev => {
+    if (ev.pointerId !== id) return;
+    dragActive = false;
+    tr.classList.remove('dragging');
+    document.body.classList.remove('dragging-on');
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', up);
+    const after = Array.from(tr.parentNode.children);
+    if (after.some((r, i) => r !== before[i])) recalc();   // only a real move changes priority and saves
+  };
+  document.addEventListener('pointermove', move, { passive: false });
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+}
+
+// While a row is being dragged with a finger, the page must not scroll.
+// The empty non-passive touchstart makes the browser wait for us, so the touchmove can still be cancelled after the hold.
+$('tbody').addEventListener('touchstart', () => {}, { passive: false });
+$('tbody').addEventListener('touchmove', e => { if (dragActive && e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', e => { if ((dragActive || pressPending) && !e.target.closest('input,textarea')) e.preventDefault(); });
 
 function nextId() {
   const used = new Set(Array.from(document.querySelectorAll('[data-f="id"]')).map(i => i.value.trim()));
@@ -258,7 +369,8 @@ function rowsRaw() {
     const v = n => tr.querySelector('[data-f="' + n + '"]').value.trim();
     return {
       id: v('id'), name: v('name'), res: v('res'), dur: v('dur'), due: v('due'), preds: v('preds'), fixed: v('fixed'),
-      extra: JSON.parse(tr.dataset.extra || '{}')
+      extra: Object.assign(JSON.parse(tr.dataset.extra || '{}'),
+        Object.fromEntries(Array.from(tr.querySelectorAll('[data-x]')).map(i => [i.dataset.x, i.value.trim()])))
     };
   });
 }
@@ -383,25 +495,23 @@ function recalc() {
     '<div class="kpi"><b>' + totalWait.toFixed(2) + ' h</b><span>Total resource waiting</span></div>' +
     (unsched ? '<div class="kpi"><b class="late">' + unsched + '</b><span>Not scheduled (cycle, missing predecessor, or beyond cap)</span></div>' : '');
 
-  $('resBody').innerHTML = T.map(x => {
+  const trs = Array.from(document.querySelectorAll('#tbody tr'));
+  T.forEach((x, i) => {
+    const tr = trs[i];
+    if (!tr) return;
     const ok = x.fin !== null;
-    const margin = (ok && x.dueAbs !== null) ? ((x.dueAbs - x.fin) / 24).toFixed(2) : '–';
-    const status = !ok ? '<span class="late">Not scheduled</span>'
-                 : x.isLate ? '<span class="late">Late</span>' : '<span class="ok">On time</span>';
+    const set = (k, h) => { const td = tr.querySelector('td.c-' + k); if (td) td.innerHTML = h; };
     const why = !ok && x.missing.length ? ' (missing: ' + esc(x.missing.join(', ')) + ')' : '';
-    return '<tr>' +
-      '<td>' + esc(x.id) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.res) + '</td><td>' + x.pri + '</td>' +
-      '<td>' + (x.first !== null ? fmtAbs(x.first, startDate) : '–') + '</td>' +
-      '<td>' + (ok ? fmtAbs(x.fin, startDate) : '–') + '</td>' +
-      '<td>' + x.dur.toFixed(2) + '</td>' +
-      '<td>' + x.wait.toFixed(2) + '</td>' +
-      '<td>' + (x.due ? fmtDay(x.due) : '–') + '</td>' +
-      '<td>' + margin + '</td>' +
-      '<td>' + status + why + '</td></tr>';
-  }).join('');
+    set('start', x.first !== null ? fmtAbs(x.first, startDate) : '–');
+    set('finish', ok ? fmtAbs(x.fin, startDate) : '–');
+    set('wait', x.wait.toFixed(2));
+    set('margin', (ok && x.dueAbs !== null) ? ((x.dueAbs - x.fin) / 24).toFixed(2) : '–');
+    set('sched', (!ok ? '<span class="late">Not scheduled</span>' : x.isLate ? '<span class="late">Late</span>' : '<span class="ok">On time</span>') + why);
+  });
 
   lastRender = { T: T, startDate: startDate, dayWin: res.dayWin };
   drawGantt(T, startDate, res.dayWin);
+  applySticky();
   queueSave();
 }
 
@@ -466,12 +576,13 @@ function drawGantt(T, startDate, dayWin) {
     }
   }
 
-  let html = '<div class="g-row g-head"><div class="g-label">Task</div><div class="g-track" style="width:' + W + 'px">' + head + '</div></div>';
-  T.forEach(x => {
-    html += '<div class="g-row"><div class="g-label" title="' + esc(x.name) + '">' + esc(x.id) + ' ' + esc(x.name) +
-            '<small>' + esc(x.res) + (x.projectNo ? ' · ' + esc(x.projectNo) : '') + ' · ' + x.dur.toFixed(2) + ' h' +
-            (x.fin === null ? ' · not scheduled' : '') + '</small></div>';
-    html += '<div class="g-track" style="width:' + W + 'px">' + grid;
+  const th = document.querySelector('#headRow th.c-gantt');
+  if (th) th.innerHTML = '<div class="g-track" style="width:' + W + 'px">' + head + '</div>';
+  const trs = Array.from(document.querySelectorAll('#tbody tr'));
+  T.forEach((x, i) => {
+    const td = trs[i] && trs[i].querySelector('td.c-gantt');
+    if (!td) return;
+    let html = '<div class="g-track" style="width:' + W + 'px">' + grid;
     x.segs.forEach(s => {
       const left = xOf(s.s), width = Math.max(2, xOf(s.e) - xOf(s.s));
       html += '<div class="bar-s' + (x.isLate ? ' late' : '') + '" style="left:' + left.toFixed(2) + 'px;width:' + width.toFixed(2) + 'px" title="' +
@@ -480,9 +591,8 @@ function drawGantt(T, startDate, dayWin) {
     if (x.dueAbs !== null) {
       html += '<div class="due" style="left:' + xOf(x.dueAbs).toFixed(2) + 'px" title="Due ' + (x.due ? fmtDay(x.due) : '') + '"></div>';
     }
-    html += '</div></div>';
+    td.innerHTML = html + '</div>';
   });
-  $('gantt').innerHTML = html;
 }
 
 /* ---------- paste from Excel ---------- */
@@ -542,6 +652,9 @@ function showLoginTab(login) {
 }
 
 async function boot() {
+  buildHead();
+  buildColMenu();
+  applyCols();
   buildWeekRow();
   loadSample();
   renumber();
@@ -598,12 +711,14 @@ $('pasteReplace').addEventListener('click', () => addPasted(true));
 document.querySelectorAll('.tabbtn[data-tab]').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('.tabbtn[data-tab]').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === b.dataset.tab));
+  applySticky();
 }));
+window.addEventListener('resize', applySticky);
 
 document.querySelectorAll('.zbtn').forEach(b => b.addEventListener('click', () => {
   zoom = b.dataset.z;
   document.querySelectorAll('.zbtn').forEach(x => x.classList.toggle('on', x === b));
-  if (lastRender) drawGantt(lastRender.T, lastRender.startDate, lastRender.dayWin);
+  if (lastRender) { drawGantt(lastRender.T, lastRender.startDate, lastRender.dayWin); applySticky(); }
 }));
 
 $('addBtn').addEventListener('click', () => {

@@ -11,7 +11,7 @@ b,strong{color:#0F3A18}
 .card{border:1px solid var(--line);border-radius:8px;padding:14px;max-width:460px;margin:20px auto}
 .stack{display:flex;flex-direction:column;gap:10px}
 .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
-fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px;min-width:0}
 legend{font-weight:600;padding:0 6px;color:#0F3A18}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
 label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut)}
@@ -33,8 +33,25 @@ td input.w{width:110px}
 td input.n{min-width:130px}
 .grip{cursor:grab;color:#9aa0aa;font-size:18px;line-height:1;user-select:none;touch-action:none;padding:0 6px;text-align:center}
 .grip:active{cursor:grabbing}
-.mb{padding:0 5px;margin:0 1px;font-size:11px;line-height:1.4}
-tr.dragging{opacity:.5;background:#f7f8fa}
+/* One table: tasks, results and Gantt. Rows drag to change priority. */
+#tbody tr{cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#tbody input{-webkit-user-select:text;user-select:text;cursor:text}
+#tbody button{cursor:pointer}
+tr.dragging td{background:#e8f0ea !important}
+body.dragging-on,body.dragging-on *{cursor:grabbing !important}
+.stk{position:sticky;background:#fff;z-index:2}
+thead .stk{z-index:3}
+#taskTable th.c-gantt,#taskTable td.c-gantt{padding:0;border-left:1px solid var(--line)}
+#taskTable td.c-gantt .g-track{height:34px}
+#taskTable th.c-gantt .g-track{height:42px}
+#taskTable .c-pri{text-align:center}
+.colmenu{position:relative}
+.colmenu summary{list-style:none;cursor:pointer;padding:5px 11px;border:1px solid #cfd4dc;border-radius:5px;background:#fff}
+.colmenu summary::-webkit-details-marker{display:none}
+.colmenu summary::after{content:" ▾";color:var(--mut)}
+.colmenu[open] summary{background:var(--acc);color:#fff;border-color:var(--acc)}
+.colbox{position:absolute;z-index:20;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;box-shadow:0 6px 18px rgba(0,0,0,.12);display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:4px 14px;max-height:320px;overflow:auto}
+.colbox label{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;cursor:pointer}
 .pri-cell{text-align:center;font-weight:600;color:var(--acc);width:60px}
 .late{color:var(--late);font-weight:600}
 .ok{color:var(--ok);font-weight:600}
@@ -70,6 +87,8 @@ tr.dragging{opacity:.5;background:#f7f8fa}
 /* Phone layout: task names stay on the left of the Gantt */
 @media (max-width:700px){
   .desk-only{display:none}
+  .stk{position:static}
+  .colbox{grid-template-columns:1fr}
   .g-label{flex:0 0 120px;width:120px}
   .g-label small{display:none}
   .g-head .g-label{font-size:11px}
