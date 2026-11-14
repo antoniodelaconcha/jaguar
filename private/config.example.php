@@ -9,6 +9,8 @@ return [
     'base_url'       => 'https://nahuatl.greenpointengineering.ca/azteca/jaguar',  // live address, https
     'allow_signup'   => true,   // true: anyone can create a company account. Set false to close sign-up.
     'secure_cookies' => true,   // true: session cookie only over HTTPS. Keep true on HostPapa with SSL.
+    'session_hours'  => 12,     // v3.2: stay logged in this many hours after the last action (also after closing the browser)
+    'cookie_path'    => '/azteca/jaguar/',  // v3.2: the session cookie belongs to Jaguar only
 
     'db' => [
         'host' => 'localhost',           // HostPapa normally uses localhost; check MySQL Databases page

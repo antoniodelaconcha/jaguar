@@ -3,3 +3,6 @@ private/config.php
 # Server logs
 error_log
 *.log
+
+# Session files (v3.2), created on the server
+private/sessions/

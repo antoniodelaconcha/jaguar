@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.2 - 2026-11-14 - Fix: logged out too often
+Files: private/src/lib.php (private/config.example.php updated for reference). No database change, no front-end change.
+- Session files now kept in nahuatl-private/jaguar/sessions/ (created automatically), not the hosting's shared
+  session folder, which the cPanel clean-up job and other apps on the account can empty.
+- Stay logged in 12 hours after the last action, also after closing the browser (config key session_hours, optional).
+- Every request extends the session (sliding expiry).
+- Session cookie limited to /azteca/jaguar/ (config key cookie_path, optional) so other apps on the same host
+  (Coyote) cannot clash with it.
+- Everyone logs in once after deploying.
+
 ## v3.1 - 2026-11-12 - Excel-style table, Pdd, 24-hour date and time
 Files: public/index.html, public/assets/app.js, public/assets/app.css, public/api/index.php, private/src/lib.php.
 Database: database/migrations/v3.1.sql (adds tasks.due_time and tasks.fixed_time; run before the PHP files).

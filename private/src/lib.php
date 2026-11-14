@@ -35,18 +35,50 @@ function db(): PDO
     return $pdo;
 }
 
+/*
+ * v3.2: Jaguar keeps its own sessions.
+ * - Session files live in private/sessions/ (not the hosting account's shared folder), so the cPanel
+ *   clean-up job and other apps on the same account (Coyote) cannot delete them.
+ * - A session lasts session_hours (config, default 12) since the last request, and survives closing the browser.
+ * - The cookie only belongs to /azteca/jaguar/, so other apps on nahuatl.greenpointengineering.ca cannot clash with it.
+ */
 function start_session(): void
 {
+    $c = cfg();
+    $hours = (float) ($c['session_hours'] ?? 12);
+    $life = max(900, (int) round($hours * 3600));
+    $path = (string) ($c['cookie_path'] ?? '/azteca/jaguar/');
+
+    $dir = __DIR__ . '/../sessions';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    if (is_dir($dir) && is_writable($dir)) {
+        session_save_path($dir);
+        ini_set('session.gc_probability', '1');
+        ini_set('session.gc_divisor', '100');
+    }
+    ini_set('session.gc_maxlifetime', (string) $life);
+    ini_set('session.use_strict_mode', '1');
+
     session_name('jaguar_sess');
     session_set_cookie_params([
-        'lifetime' => 0,
-        'path' => '/',
-        'secure' => (bool) cfg()['secure_cookies'],
+        'lifetime' => $life,
+        'path' => $path,
+        'secure' => (bool) $c['secure_cookies'],
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
-    ini_set('session.use_strict_mode', '1');
     session_start();
+
+    // Sliding expiry: every request pushes the cookie's end time forward.
+    setcookie(session_name(), session_id(), [
+        'expires' => time() + $life,
+        'path' => $path,
+        'secure' => (bool) $c['secure_cookies'],
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
 }
 
 function json_out($data, int $code = 200): void
